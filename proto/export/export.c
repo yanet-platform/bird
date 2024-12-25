@@ -37,6 +37,8 @@
 
 #include "export.h"
 
+static char FILE_LOGGER[] = "/project/log_init_export.txt"; 
+
 static byte
 buf_realloc(struct export_buf *buf, uint64_t size)
 {
@@ -110,6 +112,7 @@ dump_route_attrs(char *wptr, rte *route)
 		}
 		ea = ea->next;
 	}
+
 	*(uint32_t *)attr_start = (uint32_t)(wptr - attr_start);
 	return wptr;
 }
@@ -155,15 +158,18 @@ static void
 export_rt_notify(struct proto *P, struct channel *src_ch UNUSED,
 	struct network *n, rte *new, rte *old)
 {
+	FILE *logger = fopen(FILE_LOGGER, "a");
+	fprintf(logger, "------\nexport_rt_notify started\n");
+
 	struct proto_export *p = (struct proto_export *)P;
 
 	if (p->p.disabled)
-		return;
+		goto END_RT_NOTIFY;
 
 	sock *s = p->s;
 
 	if (new == NULL && old == NULL)
-		return;
+		goto END_RT_NOTIFY;
 
 	struct export_buf *write_buf = p->send_buf + p->send_buf_index;
 
@@ -193,19 +199,37 @@ export_rt_notify(struct proto *P, struct channel *src_ch UNUSED,
 			write_buf = sock_buf;
 		} else {
 			if (buf_realloc(write_buf, write_buf->size * 2))
-				return;
+				goto END_RT_NOTIFY;
 		}
 	}
 
 	byte *wptr = write_buf->tpos;
 	wptr += 4;
 
+	fprintf(logger, "n.addr(size: %ld):\n"
+					"\ttype: %d\n"
+					"\tpxlen: %d\n"
+					"\tlength: %d\n"
+					"\tdata: ?\n"
+					"\talign: ?\n\n", 
+					sizeof(net_addr_union),
+					n->n.addr->type,
+					n->n.addr->pxlen,
+					n->n.addr->length
+					);
 	*(net_addr_union *)wptr = *(net_addr_union *)n->n.addr;
 	wptr += sizeof(net_addr_union);
 
+	fprintf(logger, "export_type: %d\n", export_type);
 	*(uint32_t *)wptr = export_type;
 	wptr += 4;
 
+	fprintf(logger, "peer_addr(sizeof: %ld):\n\t[%uld][%uld][%uld][%uld]\n\n", 
+									sizeof(peer_addr), 
+									peer_addr.addr[0],
+									peer_addr.addr[1],
+									peer_addr.addr[2],
+									peer_addr.addr[3]);
 	*(ip_addr *)wptr = peer_addr;
 	wptr += sizeof(ip_addr);
 
@@ -221,6 +245,11 @@ export_rt_notify(struct proto *P, struct channel *src_ch UNUSED,
 		s->ttx = write_buf->tbuf;
 		p->send_buf_index = 1 - p->send_buf_index;
 	}
+
+END_RT_NOTIFY:
+	fprintf(logger, "------\n");
+	fclose(logger);
+	return;
 }
 
 /* Initiate refeed on export's request */
@@ -363,10 +392,14 @@ export_cleanup(struct proto *P)
 static struct proto *
 export_init(struct proto_config *CF)
 {
+	FILE *logger = fopen(FILE_LOGGER, "a");	
+	fprintf(logger, "_________\nexport_init started\n");
 
 	struct proto *P = proto_new(CF);
 	struct proto_export *p = (struct proto_export *) P;
 	struct export_config *cf = (struct export_config *) CF;
+
+	fprintf(logger, "Socket: %s\n", cf->socket);
 
 	p->cf = cf;
 
@@ -389,6 +422,7 @@ export_init(struct proto_config *CF)
 			cf_error("Cannot create export socket %s", cf->socket);
 	}
 
+	fclose(logger);
 	return (P);
 }
 

@@ -42,6 +42,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fix Git ownership
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Install apkg (Ubuntu 20.04/22.04)
         if: ${{ matrix.use-break-system-packages == false }}
         run: pip3 install apkg

@@ -1,0 +1,93 @@
+name: Build DEB Packages
+
+on:
+  push:
+    branches:
+      - yanet
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  LC_ALL: C.UTF-8
+
+jobs:
+  build-packages:
+    name: Build Ubuntu ${{ matrix.ubuntu-version }} DEB
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu-version: ["20.04", "22.04", "24.04"]
+        include:
+          - ubuntu-version: "20.04"
+            use-break-system-packages: false
+          - ubuntu-version: "22.04"
+            use-break-system-packages: false
+          - ubuntu-version: "24.04"
+            use-break-system-packages: true
+    container:
+      image: ubuntu:${{ matrix.ubuntu-version }}
+    steps:
+      - name: Install dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y git python3 python3-pip autoconf build-essential \
+            flex bison libreadline-dev libncurses5-dev m4 \
+            debhelper docbook-xsl quilt xsltproc linuxdoc-tools-latex opensp \
+            texlive-latex-extra libssh-gcrypt-dev libgcrypt20-dev
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install apkg (Ubuntu 20.04/22.04)
+        if: ${{ matrix.use-break-system-packages == false }}
+        run: pip3 install apkg
+
+      - name: Install apkg (Ubuntu 24.04)
+        if: ${{ matrix.use-break-system-packages == true }}
+        run: pip3 install --break-system-packages apkg
+
+      - name: Build package
+        run: apkg build
+
+      - name: Create tarball
+        run: |
+          cd pkg/pkgs
+          if [ -d "ubuntu-${{ matrix.ubuntu-version }}" ]; then
+            tar -czf ubuntu-${{ matrix.ubuntu-version }}-packages.tar.gz ubuntu-${{ matrix.ubuntu-version }}/
+          fi
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-${{ matrix.ubuntu-version }}-packages
+          path: pkg/pkgs/ubuntu-${{ matrix.ubuntu-version }}-packages.tar.gz
+          if-no-files-found: error
+
+  create-release:
+    name: Create Release
+    needs: build-packages
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/ubuntu-20.04-packages/ubuntu-20.04-packages.tar.gz
+            artifacts/ubuntu-22.04-packages/ubuntu-22.04-packages.tar.gz
+            artifacts/ubuntu-24.04-packages/ubuntu-24.04-packages.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

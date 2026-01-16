@@ -1,4 +1,4 @@
-Source: bird2
+Source: yanet-bird2
 Section: net
 Priority: optional
 Build-Depends: bison,
@@ -7,7 +7,7 @@ Build-Depends: bison,
                flex,
                libncurses-dev,
                libreadline-dev | libreadline6-dev | libreadline5-dev,
-               libssh-gcrypt-dev,
+               libssh-gcrypt-dev | libgcrypt20-dev,
                m4,
                quilt,
                xsltproc
@@ -15,13 +15,10 @@ Build-Depends-Indep: linuxdoc-tools-latex,
                opensp,
                texlive-latex-extra
 Maintainer: Jakub Ružička <jakub.ruzicka@nic.cz>
-Uploaders: Ondřej Surý <ondrej@debian.org>
 Standards-Version: 4.6.2
-Vcs-Browser: https://salsa.debian.org/debian/bird2
-Vcs-Git: https://salsa.debian.org/debian/bird2.git
-Homepage: https://bird.network.cz/
+Homepage: https://github.com/yanet-platform/bird/tree/yanet
 
-Package: bird2
+Package: yanet-bird2
 Architecture: kfreebsd-any linux-any
 Pre-Depends: init-system-helpers,
              ${misc:Pre-Depends}
@@ -29,7 +26,9 @@ Depends: adduser,
          ucf,
          ${misc:Depends},
          ${shlibs:Depends}
-Conflicts: bird
+Conflicts: bird, bird2
+Provides: bird2
+Replaces: bird2
 Suggests: bird2-doc
 Description: Internet Routing Daemon
  BIRD is an Internet routing daemon with full support for all the major

@@ -1,5 +1,5 @@
-bird2 ({{ version }}-cznic.{{ release }}) unstable; urgency=medium
+yanet-bird2 ({{ version }}-{{ release }}) unstable; urgency=medium
 
-  * upstream package
+  * yanet fork package
 
- -- Jakub Ružička <jakub.ruzicka@nic.cz>  {{ now }}
+ -- Sergey Kacheev <s.kacheev@gmail.com>  {{ now }}

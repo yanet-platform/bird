@@ -139,6 +139,7 @@ export_route_size(rte *route)
 {
 	size_t size = 4 + sizeof(net_addr_union) + 4;
 	size += sizeof(ip_addr);
+	size += 4;			/* rte_src global_id */
 
 	size += 4;
 	struct ea_list *ea = route->attrs->eattrs;
@@ -221,6 +222,9 @@ export_emit_route(struct proto_export *p, struct network *n, rte *route,
 
 	*(ip_addr *)wptr = peer_addr;
 	wptr += sizeof(ip_addr);
+
+	*(uint32_t *)wptr = route->src->global_id;
+	wptr += 4;
 
 	wptr = dump_route_attrs(wptr, route);
 

@@ -178,28 +178,14 @@ export_route_size(rte *route)
 	return size;
 }
 
+/* Serialize a single route into the send buffer with the given export type
+ * (1 = add/update, 2 = withdraw). */
 static void
-export_rt_notify(struct proto *P, struct channel *src_ch UNUSED,
-	struct network *n, rte *new, rte *old)
+export_emit_route(struct proto_export *p, struct network *n, rte *route,
+	uint32_t export_type)
 {
-	struct proto_export *p = (struct proto_export *)P;
-
-	if (p->p.disabled)
-		return;
-
 	sock *s = p->s;
-
-	if (new == NULL && old == NULL)
-		return;
-
 	struct export_buf *write_buf = p->send_buf + p->send_buf_index;
-
-	rte *route = new;
-	uint32_t export_type = 1;
-	if (!route) {
-		route = old;
-		export_type = 2;
-	}
 
 	ip_addr peer_addr = IPA_NONE;
 
@@ -248,6 +234,29 @@ export_rt_notify(struct proto *P, struct channel *src_ch UNUSED,
 		s->ttx = write_buf->tbuf;
 		p->send_buf_index = 1 - p->send_buf_index;
 	}
+}
+
+static void
+export_rt_notify(struct proto *P, struct channel *src_ch UNUSED,
+	struct network *n, rte *new, rte *old)
+{
+	struct proto_export *p = (struct proto_export *)P;
+
+	if (p->p.disabled)
+		return;
+
+	if (new == NULL && old == NULL)
+		return;
+
+	/* Withdraw the previous route first so a consumer keyed by prefix/peer
+	 * does not clobber the freshly added route below. A non-NULL old has
+	 * already been filtered against the channel's export_map, so it was
+	 * really exported before and this withdraw is not spurious. */
+	if (old)
+		export_emit_route(p, n, old, 2);
+
+	if (new)
+		export_emit_route(p, n, new, 1);
 }
 
 /* Initiate refeed on export's request */

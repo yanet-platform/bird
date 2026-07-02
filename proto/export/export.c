@@ -103,6 +103,13 @@ dump_route_attrs(char *wptr, rte *route)
 		wptr = dump_attr_plain_data(wptr, &attr);
 	}
 
+	if (route->attrs->nh.iface != NULL) {
+		struct eattr attr;
+		attr.id = EA_EXPORT_IFINDEX;
+		attr.u.data = route->attrs->nh.iface->index;
+		wptr = dump_attr_uint(wptr, &attr);
+	}
+
 	struct ea_list *ea = route->attrs->eattrs;
 	while (ea) {
 		for (int idx = 0; idx < ea->count; ++idx) {
@@ -175,6 +182,9 @@ export_route_size(rte *route)
 
 		size += 4 + 4 + sizeof(ip_addr);
 	}
+
+	if (route->attrs->nh.iface != NULL)
+		size += 4 + 4;			/* EA_EXPORT_IFINDEX: attr id + u32 value */
 
 	return size;
 }

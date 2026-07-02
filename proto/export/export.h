@@ -11,6 +11,11 @@
 
 #include "lib/socket.h"
 
+/* Extended route attributes in the PROTOCOL_EXPORT namespace.
+ * EA_EXPORT_IFINDEX carries the outgoing interface index (u32) of a
+ * device route, whose next hop is an interface rather than a gateway. */
+#define EA_EXPORT_IFINDEX	EA_CODE(PROTOCOL_EXPORT, 0)
+
 struct export_buf {
 	byte *tbuf;
 	byte *tpos;

@@ -11,6 +11,7 @@ on:
 env:
   DEBIAN_FRONTEND: noninteractive
   LC_ALL: C.UTF-8
+  BIRD_IMAGE: ghcr.io/yanet-platform/yanet2/bird
 
 jobs:
   build-packages:
@@ -73,6 +74,8 @@ jobs:
     name: Build BIRD image
     needs: build-packages
     runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     concurrency:
       group: bird-image-${{ github.ref }}
       cancel-in-progress: false
@@ -119,13 +122,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
+        id: image
         uses: docker/build-push-action@v7
         with:
           context: ./image-context
           file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.ref_type == 'tag' }}
-          tags: ${{ github.ref_type == 'tag' && format('ghcr.io/yanet-platform/yanet2/bird:{0}', github.ref_name) || '' }}
+          tags: ${{ github.ref_type == 'tag' && format('{0}:{1}', env.BIRD_IMAGE, github.ref_name) || '' }}
           labels: |
             org.opencontainers.image.source=https://github.com/yanet-platform/bird
             org.opencontainers.image.revision=${{ github.sha }}
@@ -178,3 +182,52 @@ jobs:
           generate_release_notes: ${{ steps.notes.outputs.generate_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-release-notes:
+    name: Add Docker image to release notes
+    needs: [create-release, publish-image]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    concurrency:
+      group: bird-release-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Append Docker image information
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          IMAGE_REFERENCE: ${{ format('{0}:{1}', env.BIRD_IMAGE, github.ref_name) }}
+          IMAGE_DIGEST: ${{ needs.publish-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json body --jq '.body // ""' > release-body.md
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          image = os.environ["IMAGE_REFERENCE"]
+          digest = os.environ["IMAGE_DIGEST"]
+          if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+              raise SystemExit("Missing or invalid Docker image digest")
+
+          notes_path = Path("release-body.md")
+          notes = re.sub(
+              r"\n*<!-- bird-docker-images:start -->.*?<!-- bird-docker-images:end -->",
+              "", notes_path.read_text(), flags=re.DOTALL,
+          ).rstrip()
+          images = (
+              "<!-- bird-docker-images:start -->\n"
+              "## Docker images\n\n"
+              f"- `{image}` (digest: `{digest}`)\n\n"
+              "## Verification\n\n"
+              f"```bash\ndocker pull {image}\n```\n"
+              "<!-- bird-docker-images:end -->\n"
+          )
+          notes_path.write_text(f"{notes}\n\n{images}" if notes else images)
+          PY
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --notes-file release-body.md
